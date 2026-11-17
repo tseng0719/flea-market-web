@@ -1,0 +1,2 @@
+-- Allow place_order for a subset of sellers in the cart (per-seller checkout).
+-- Applied via migration place_order_subset_sellers.
