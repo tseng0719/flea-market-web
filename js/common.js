@@ -114,6 +114,7 @@
     if (/Invalid login credentials/i.test(msg)) return t("errLogin");
     if (/Email not confirmed/i.test(msg)) return t("errConfirm");
     if (/already registered/i.test(msg)) return t("errExists");
+    if (/User is banned|banned/i.test(msg)) return t("accountDeletedLogin");
     if (/row-level security/i.test(msg)) return t("errRls");
     if (/JWT|not authenticated/i.test(msg)) return t("errAuth");
     return window.C2CLang.server(msg) || t("errFail");
@@ -195,6 +196,26 @@
     el.textContent = message || "";
   }
 
+  var PRODUCT_CATEGORIES = [
+    "3C",
+    "書籍",
+    "生活",
+    "配件",
+    "服飾",
+    "鞋包",
+    "美妝保養",
+    "運動戶外",
+    "家電",
+    "家具寢具",
+    "文具",
+    "票券",
+    "遊戲娛樂",
+    "樂器",
+    "交通運具",
+    "寵物",
+    "其他"
+  ];
+
   var seedEn = {
     "二手微積分課本": "Used Calculus Textbook",
     "九成新藍牙耳機": "Like-new Bluetooth Earbuds",
@@ -210,6 +231,19 @@
     "生活": "Daily goods",
     "配件": "Accessories",
     "3C": "Electronics",
+    "服飾": "Apparel",
+    "鞋包": "Shoes & bags",
+    "美妝保養": "Beauty & care",
+    "運動戶外": "Sports & outdoors",
+    "家電": "Home appliances",
+    "家具寢具": "Furniture & bedding",
+    "文具": "Stationery",
+    "票券": "Tickets & vouchers",
+    "遊戲娛樂": "Games & entertainment",
+    "樂器": "Instruments",
+    "交通運具": "Bikes & transport",
+    "寵物": "Pets",
+    "其他": "Other",
     "上學期用過，封面有輕微摺痕，內頁乾淨、無缺頁。": "Used last semester. The cover has a light crease; pages are clean with nothing missing.",
     "使用約半年，充電盒與耳機都在，音量與連線正常。": "Used for about half a year. Case and earbuds included; volume and connection work.",
     "三段亮度都能用，燈臂可折，適合宿舍閱讀。": "All three brightness levels work, and the arm folds. Good for dorm reading.",
@@ -293,11 +327,18 @@
 
   async function loadIdentity() {
     var uid = userId();
-    var profileRes = await state.client.from("profiles").select("id, email, display_name, phone, address, created_at").eq("id", uid).maybeSingle();
+    var profileRes = await state.client.from("profiles").select("id, email, display_name, phone, address, created_at, deleted_at, delete_reason").eq("id", uid).maybeSingle();
     var rolesRes = await state.client.from("user_roles").select("role").eq("user_id", uid);
     if (profileRes.error) throw profileRes.error;
     if (rolesRes.error) throw rolesRes.error;
     state.profile = profileRes.data;
+    if (state.profile && state.profile.deleted_at) {
+      state.roles = [];
+      await state.client.auth.signOut();
+      state.session = null;
+      state.profile = null;
+      throw new Error(t("accountDeletedLogin"));
+    }
     var rank = { buyer: 0, seller: 1, admin: 2 };
     state.roles = (rolesRes.data || []).map(function (row) { return row.role; }).sort(function (a, b) {
       return (rank[a] || 9) - (rank[b] || 9);
@@ -313,11 +354,13 @@
     process: '<path d="M4.5 7h15v3.5H4.5zM4.5 13.5h15V17H4.5z"/><circle cx="8" cy="8.5" r="1"/><circle cx="8" cy="15.2" r="1"/>',
     dash: '<path d="M4.5 4.5h6.5v6.5H4.5zM13 4.5h6.5v4H13zM13 11.5h6.5v8H13zM4.5 14h6.5v5.5H4.5z"/>',
     admin: '<path d="M12 3.5 19 7v5.2c0 4.2-2.8 7.4-7 8.8-4.2-1.4-7-4.6-7-8.8V7l7-3.5z"/><path d="M9.5 12.2 11.2 14l3.5-3.8"/>',
+    accounts: '<circle cx="9" cy="8" r="2.8"/><circle cx="16.2" cy="9.2" r="2.2"/><path d="M3.8 18.5a5.2 5.2 0 0 1 10.4 0"/><path d="M13.2 18.5a4.2 4.2 0 0 1 7 0"/>',
     preview: '<circle cx="12" cy="12" r="3"/><path d="M3.5 12S7 6.5 12 6.5 20.5 12 20.5 12 17 17.5 12 17.5 3.5 12 3.5 12z"/>',
     login: '<path d="M10 4.5h7.5v15H10"/><path d="M4.5 12h10"/><path d="M11.5 8.5 15 12l-3.5 3.5"/>',
     register: '<circle cx="12" cy="8" r="3"/><path d="M5.8 19a6.2 6.2 0 0 1 8.7-2.4"/><path d="M16.5 14.5v6M13.5 17.5h6"/>',
     logout: '<path d="M10 4.5H5.5v15H10"/><path d="M10 12h9"/><path d="M15.5 8.5 19 12l-3.5 3.5"/>',
-    checkout: '<path d="M5 6.5h14l-1.2 9.5H7.2L5 6.5z"/><path d="M9 16.8V19a1.2 1.2 0 0 0 1.2 1.2h3.6A1.2 1.2 0 0 0 15 19v-2.2"/><path d="M9.5 10.5h5"/>'
+    checkout: '<path d="M5 6.5h14l-1.2 9.5H7.2L5 6.5z"/><path d="M9 16.8V19a1.2 1.2 0 0 0 1.2 1.2h3.6A1.2 1.2 0 0 0 15 19v-2.2"/><path d="M9.5 10.5h5"/>',
+    back: '<path d="M14.5 6.5 9 12l5.5 5.5"/><path d="M9 12h10.5"/>'
   };
 
   function icon(name) {
@@ -338,6 +381,7 @@
     if (href === "seller/products.html") return "mine";
     if (href === "seller/dashboard.html") return "dash";
     if (href === "admin/transactions.html") return "admin";
+    if (href === "admin/accounts.html") return "accounts";
     if (href === "index.html") {
       if (mode() === "seller" || mode() === "admin") return "preview";
       return "products";
@@ -363,6 +407,7 @@
     } else if (mode() === "admin") {
       items = [
         ["admin/transactions.html", t("navAdmin"), "admin"],
+        ["admin/accounts.html", t("navAccounts"), "admin-accounts"],
         ["profile.html", t("navProfile"), "profile"],
         ["index.html", t("navPreview"), "home product"]
       ];
@@ -401,6 +446,7 @@
       "seller-orders": "titleProcess",
       "seller-dashboard": "titleDash",
       admin: "titleAdmin",
+      "admin-accounts": "titleAccounts",
       profile: "titleProfile"
     };
     document.title = t(titles[pageName()] || "titleHome");
@@ -710,18 +756,34 @@
     return text;
   }
 
-  function downloadCsv(filename, orders) {
-    var mine = (orders || []).filter(function (order) { return order.seller_id === userId(); });
-    var lines = [[t("csvNo"), t("csvTime"), t("csvBuyer"), t("csvStatus"), t("csvAmount"), t("csvPay"), t("csvShip"), t("csvDone"), t("csvContact"), t("csvPhone"), t("csvFulfill"), t("csvPlace"), t("csvPayMethod"), t("csvItems")].join(",")];
-    mine.forEach(function (order) {
+  function downloadOrdersCsv(filename, orders) {
+    var rows = orders || [];
+    var lines = [[
+      t("csvNo"),
+      t("csvTime"),
+      t("csvBuyer"),
+      t("csvSeller"),
+      t("csvStatus"),
+      t("csvAmount"),
+      t("csvPay"),
+      t("csvShip"),
+      t("csvDone"),
+      t("csvContact"),
+      t("csvPhone"),
+      t("csvFulfill"),
+      t("csvPlace"),
+      t("csvPayMethod"),
+      t("csvItems")
+    ].join(",")];
+    rows.forEach(function (order) {
       var items = (order.order_items || []).map(function (item) {
         return shown(item.product_name) + " x" + item.quantity;
       }).join(window.C2CLang.get() === "en" ? "; " : "；");
-      var buyer = person(order.buyer, true);
       lines.push([
         order.order_no,
         when(order.created_at),
-        buyer,
+        person(order.buyer, true),
+        person(order.seller, true),
         statusText(order.status),
         order.total,
         when(order.payment_confirmed_at),
@@ -743,7 +805,13 @@
     URL.revokeObjectURL(link.href);
   }
 
+  function downloadCsv(filename, orders) {
+    var mine = (orders || []).filter(function (order) { return order.seller_id === userId(); });
+    downloadOrdersCsv(filename, mine);
+  }
+
   async function boot() {
+    var deletedBlocked = false;
     if (window.supabase && configured()) {
       state.client = window.supabase.createClient(window.C2C_SUPABASE.url, window.C2C_SUPABASE.key, {
         auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -751,9 +819,24 @@
       var sessionRes = await state.client.auth.getSession();
       if (sessionRes.error) throw sessionRes.error;
       state.session = sessionRes.data.session;
-      if (state.session) await loadIdentity();
+      if (state.session) {
+        try {
+          await loadIdentity();
+        } catch (err) {
+          var msg = (err && err.message) || "";
+          if (msg === t("accountDeletedLogin") || /已被管理員刪除|deleted by an admin/i.test(msg)) {
+            deletedBlocked = true;
+            state.session = null;
+            state.profile = null;
+            state.roles = [];
+          } else {
+            throw err;
+          }
+        }
+      }
     }
     renderChrome();
+    if (deletedBlocked) flash(t("accountDeletedLogin"), "bad");
   }
 
   window.C2C = {
@@ -777,6 +860,8 @@
     bindSellerActions: bindOrderActions,
     uploadProductImage: uploadProductImage,
     downloadCsv: downloadCsv,
+    downloadOrdersCsv: downloadOrdersCsv,
+    fulfillmentLabel: fulfillmentLabel,
     refreshCartCount: refreshCartCount,
     renderChrome: renderChrome,
     userId: userId,
@@ -787,7 +872,8 @@
     gloss: gloss,
     prepare: prepare,
     icon: icon,
-    withIcon: withIcon
+    withIcon: withIcon,
+    productCategories: function () { return PRODUCT_CATEGORIES.slice(); }
   };
 
   document.addEventListener("DOMContentLoaded", function () {

@@ -97,17 +97,21 @@ function filteredProducts() {
   return list;
 }
 
-function categoryDatalist() {
-  var raw = {};
-  sellerUi.products.forEach(function (product) {
-    var category = (product.category || "").trim();
-    if (category) raw[category] = true;
+function categorySelectOptions(selected) {
+  var t = C2C.t;
+  var current = String(selected || "").trim();
+  var presets = C2C.productCategories();
+  var seen = {};
+  var html = '<option value="">' + C2C.esc(t("chooseCategory")) + "</option>";
+  presets.forEach(function (category) {
+    seen[category] = true;
+    html += '<option value="' + C2C.esc(category) + '"' + (current === category ? " selected" : "") + ">" +
+      C2C.esc(C2C.shown(category)) + "</option>";
   });
-  var keys = Object.keys(raw).sort();
-  if (!keys.length) return "";
-  return '<datalist id="seller-cat-list">' + keys.map(function (category) {
-    return '<option value="' + C2C.esc(window.C2CLang.get() === "en" ? C2C.shown(category) : category) + '">';
-  }).join("") + "</datalist>";
+  if (current && !seen[current]) {
+    html += '<option value="' + C2C.esc(current) + '" selected>' + C2C.esc(C2C.shown(current)) + "</option>";
+  }
+  return html;
 }
 
 function formHtml(product) {
@@ -120,14 +124,14 @@ function formHtml(product) {
     '<input type="hidden" name="id" value="' + C2C.esc(product.id || "") + '">' +
     '<div class="form-grid">' +
     '<label class="field">' + C2C.esc(t("name")) + '<input name="name" maxlength="120" required value="' + C2C.esc(C2C.shown(product.name || "")) + '"></label>' +
-    '<label class="field">' + C2C.esc(t("category")) + '<input name="category" maxlength="60" list="seller-cat-list" value="' + C2C.esc(C2C.shown(product.category || "")) + '"></label>' +
+    '<label class="field">' + C2C.esc(t("category")) + '<select name="category" required>' + categorySelectOptions(product.category || "") + "</select></label>" +
     '<label class="field span-2">' + C2C.esc(t("desc")) + '<textarea name="description" maxlength="4000">' + C2C.esc(C2C.shown(product.description || "")) + "</textarea></label>" +
     '<label class="field">' + C2C.esc(t("price")) + '<input name="price" type="number" min="0" step="0.01" required value="' + C2C.esc(product.price == null ? "" : product.price) + '"></label>' +
     '<label class="field">' + C2C.esc(t("stockHead")) + '<input name="quantity" type="number" min="0" step="1" required value="' + C2C.esc(product.quantity == null ? "3" : product.quantity) + '"></label>' +
     '<label class="field span-2">' + C2C.esc(t("image")) + '<input name="image_file" type="file" accept="image/jpeg,image/png,image/webp,image/gif"></label>' +
     "</div>" +
     '<p class="hint">' + C2C.esc(t("imageHint")) + (product.image_url ? " " + C2C.esc(t("imageKeep")) : "") + "</p>" +
-    '<div class="image-preview">' + preview + "</div>" + categoryDatalist() +
+    '<div class="image-preview">' + preview + "</div>" +
     '<div class="row"><button class="btn" type="submit">' + C2C.esc(product.id ? t("save") : t("listBtn")) + '</button><button class="btn ghost" id="reset-form" type="button">' + C2C.esc(t("clear")) + "</button></div></form>";
 }
 
@@ -379,7 +383,7 @@ function bindUi() {
         quantity: Number(data.get("quantity")),
         image_url: original && original.image_url ? original.image_url : ""
       };
-      if (!payload.name || payload.price < 0 || !Number.isInteger(payload.quantity) || payload.quantity < 0) {
+      if (!payload.name || !payload.category || payload.price < 0 || !Number.isInteger(payload.quantity) || payload.quantity < 0) {
         C2C.flash(C2C.t("badForm"), "bad");
         return;
       }
