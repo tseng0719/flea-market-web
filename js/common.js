@@ -89,6 +89,12 @@
     return root ? root + "/" + rel : rel;
   }
 
+  function absoluteUrl(rel) {
+    var anchor = document.createElement("a");
+    anchor.href = path(rel);
+    return anchor.href;
+  }
+
   function pageName() {
     return document.body.getAttribute("data-page") || "";
   }
@@ -332,7 +338,7 @@
     if (profileRes.error) throw profileRes.error;
     if (rolesRes.error) throw rolesRes.error;
     state.profile = profileRes.data;
-    if (state.profile && state.profile.deleted_at) {
+    if (state.profile && state.profile.deleted_at && pageName() !== "reset-password") {
       state.roles = [];
       await state.client.auth.signOut();
       state.session = null;
@@ -439,6 +445,8 @@
       home: "titleHome",
       product: "titleProduct",
       login: "titleLogin",
+      "forgot-password": "titleForgot",
+      "reset-password": "titleReset",
       register: "titleRegister",
       cart: "titleCart",
       "buyer-orders": "titleOrders",
@@ -873,6 +881,7 @@
     prepare: prepare,
     icon: icon,
     withIcon: withIcon,
+    absoluteUrl: absoluteUrl,
     productCategories: function () { return PRODUCT_CATEGORIES.slice(); }
   };
 

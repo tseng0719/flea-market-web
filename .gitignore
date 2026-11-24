@@ -8,3 +8,4 @@ node_modules/
 .idea/
 *.tmp
 *.swp
+.vercel

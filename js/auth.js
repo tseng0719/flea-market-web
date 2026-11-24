@@ -18,6 +18,7 @@ window.C2CPage = async function () {
       '<label class="field">' + C2C.esc(t("email")) + '<input name="email" type="email" required autocomplete="username"></label>' +
       '<label class="field">' + C2C.esc(t("password")) + '<input name="password" type="password" minlength="6" required autocomplete="current-password"></label>' +
       '<button class="btn" type="submit">' + C2C.esc(t("signIn")) + "</button></form>" +
+      '<p class="hint auth-switch"><a href="' + C2C.esc(C2C.path("forgot-password.html")) + '">' + C2C.esc(t("forgotLink")) + "</a></p>" +
       '<p class="hint auth-switch">' + C2C.esc(t("noAccount")) + ' <a href="' + C2C.esc(C2C.path("register.html")) + '">' + C2C.esc(t("navRegister")) + "</a></p></section>";
     bindLogin();
     return;
