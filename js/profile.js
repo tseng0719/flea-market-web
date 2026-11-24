@@ -17,10 +17,17 @@ async function loadProfile() {
 }
 
 function roleBadges(t) {
-  return (C2C.state.roles || []).map(function (role) {
+  var chips = (C2C.state.roles || []).map(function (role) {
     var label = role === "seller" ? t("sellerMode") : role === "admin" ? t("adminMode") : t("buyerMode");
     return '<span class="product-chip">' + C2C.esc(label) + "</span>";
-  }).join(" ");
+  });
+  var status = C2C.state.profile && C2C.state.profile.seller_status;
+  if (status === "pending" && (C2C.state.roles || []).indexOf("seller") < 0) {
+    chips.push('<span class="product-chip">' + C2C.esc(t("sellerPendingBadge")) + "</span>");
+  } else if (status === "rejected" && (C2C.state.roles || []).indexOf("seller") < 0) {
+    chips.push('<span class="product-chip">' + C2C.esc(t("sellerRejectedBadge")) + "</span>");
+  }
+  return chips.join(" ") || '<span class="hint">—</span>';
 }
 
 async function renderProfile() {
@@ -41,6 +48,16 @@ async function renderProfile() {
     "<div><h2>" + C2C.esc(C2C.shown(profile.display_name || "")) + "</h2>" +
     '<p class="hint">' + C2C.esc(profile.email || "") + "</p>" +
     '<div class="profile-roles">' + roleBadges(t) + "</div>" +
+    (C2C.state.profile && C2C.state.profile.seller_status === "pending"
+      ? '<p class="hint">' + C2C.esc(t("sellerPendingBody")) + "</p>"
+      : "") +
+    (C2C.state.profile && C2C.state.profile.seller_status === "rejected"
+      ? '<p class="hint">' + C2C.esc(
+          C2C.state.profile.seller_reject_reason
+            ? t("sellerRejectedReason", { reason: C2C.state.profile.seller_reject_reason })
+            : t("sellerRejectedBody")
+        ) + "</p>"
+      : "") +
     '<p class="hint">' + C2C.esc(t("profileJoined", { time: C2C.when(profile.created_at) || "—" })) + "</p>" +
     "</div></div>" +
     '<form id="profile-form" class="checkout-grid profile-form">' +

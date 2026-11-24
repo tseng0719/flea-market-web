@@ -333,7 +333,7 @@
 
   async function loadIdentity() {
     var uid = userId();
-    var profileRes = await state.client.from("profiles").select("id, email, display_name, phone, address, created_at, deleted_at, delete_reason").eq("id", uid).maybeSingle();
+    var profileRes = await state.client.from("profiles").select("id, email, display_name, phone, address, created_at, deleted_at, delete_reason, seller_status, seller_reviewed_at, seller_reject_reason").eq("id", uid).maybeSingle();
     var rolesRes = await state.client.from("user_roles").select("role").eq("user_id", uid);
     if (profileRes.error) throw profileRes.error;
     if (rolesRes.error) throw rolesRes.error;
@@ -402,6 +402,11 @@
       items = [
         ["index.html", t("navProducts"), "home product"]
       ];
+    } else if (isSellerPending()) {
+      items = [
+        ["index.html", t("navProducts"), "home product"],
+        ["profile.html", t("navProfile"), "profile"]
+      ];
     } else if (mode() === "seller") {
       items = [
         ["seller/products.html", t("navMine"), "seller-products"],
@@ -468,6 +473,10 @@
         }).join("") + "</select></label>";
       } else if (state.roles.length === 1) {
         switcher = '<span class="who">' + esc(roleLabel(state.roles[0])) + "</span>";
+      } else if (isSellerPending()) {
+        switcher = '<span class="who badge role-pending">' + esc(t("sellerPendingBadge")) + "</span>";
+      } else if (isSellerRejected()) {
+        switcher = '<span class="who badge role-rejected">' + esc(t("sellerRejectedBadge")) + "</span>";
       }
       account = '<div class="account"><a class="who profile-link" href="' + esc(path("profile.html")) + '">' + withIcon("profile", name) + "</a>" + switcher + '<button class="btn ghost btn-icon" id="sign-out" type="button">' + withIcon("logout", t("logout")) + "</button></div>";
     } else {
@@ -531,6 +540,16 @@
     renderChrome();
   }
 
+  function isSellerPending() {
+    return !!(state.profile && state.profile.seller_status === "pending" &&
+      state.roles.indexOf("seller") < 0 && state.roles.indexOf("admin") < 0);
+  }
+
+  function isSellerRejected() {
+    return !!(state.profile && state.profile.seller_status === "rejected" &&
+      state.roles.indexOf("seller") < 0 && state.roles.indexOf("admin") < 0);
+  }
+
   function guard(role) {
     var app = document.getElementById("app");
     if (!configured()) {
@@ -543,6 +562,19 @@
       return false;
     }
     if (role && state.roles.indexOf(role) < 0) {
+      if (isSellerPending()) {
+        app.innerHTML = '<section class="panel"><h1>' + esc(t("sellerPendingTitle")) + "</h1><p>" + esc(t("sellerPendingBody")) + "</p>" +
+          '<p class="hint"><a href="' + esc(path("index.html")) + '">' + esc(t("backHome")) + "</a></p></section>";
+        return false;
+      }
+      if (isSellerRejected()) {
+        var rejectNote = state.profile && state.profile.seller_reject_reason
+          ? t("sellerRejectedReason", { reason: state.profile.seller_reject_reason })
+          : t("sellerRejectedBody");
+        app.innerHTML = '<section class="panel"><h1>' + esc(t("sellerRejectedTitle")) + "</h1><p>" + esc(rejectNote) + "</p>" +
+          '<p class="hint"><a href="' + esc(path("index.html")) + '">' + esc(t("backHome")) + "</a></p></section>";
+        return false;
+      }
       var names = state.roles.map(roleLabel).join(window.C2CLang.get() === "en" ? ", " : "、");
       app.innerHTML = '<section class="panel"><h1>' + esc(t("noRole")) + "</h1><p>" + esc(t("rolesNow", { roles: names || t("noneRole") })) + "</p><p>" + esc(t("roleHelp")) + "</p></section>";
       return false;

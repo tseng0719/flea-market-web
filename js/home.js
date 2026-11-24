@@ -5,6 +5,13 @@ window.C2CPage = async function () {
     app.innerHTML = '<section class="panel"><h1>' + C2C.esc(t("needConfigTitle")) + "</h1><p>" + C2C.esc(t("needConfigBody")) + "</p></section>";
     return;
   }
+
+  var pendingSeller = !!(C2C.state.profile && C2C.state.profile.seller_status === "pending" &&
+    (C2C.state.roles || []).indexOf("seller") < 0 && (C2C.state.roles || []).indexOf("admin") < 0);
+  if (pendingSeller || new URLSearchParams(location.search).get("seller_pending") === "1") {
+    C2C.flash(t("sellerPendingCreated"));
+  }
+
   var res = await C2C.state.client
     .from("products")
     .select("id, name, category, description, price, quantity, image_url, created_at, seller:profiles!products_seller_id_fkey(display_name)")
@@ -337,10 +344,20 @@ window.C2CPage = async function () {
     });
   }
 
+  function pendingBanner() {
+    if (!pendingSeller) return "";
+    return '<section class="panel seller-pending-banner">' +
+      "<h2>" + C2C.esc(t("sellerPendingTitle")) + "</h2>" +
+      "<p>" + C2C.esc(t("sellerPendingBody")) + "</p>" +
+      '<p class="hint">' + C2C.esc(t("sellerPendingBrowseHint")) + "</p>" +
+      "</section>";
+  }
+
   function paint(full) {
     document.removeEventListener("click", onDocClick);
     if (full) {
       app.innerHTML =
+        pendingBanner() +
         '<section class="hero"><img class="hero-photo" src="' + C2C.esc(C2C.path("images/hero-banner.jpg")) + '" alt="">' +
         '<div class="hero-copy"><div class="hero-copy-inner"><p class="hero-kicker">' + C2C.esc(t("heroKicker")) + "</p><h1>" + C2C.esc(t("heroTitle")) + '</h1><p class="hero-sub">' + C2C.esc(t("heroSub")) + "</p></div></div></section>" +
         toolbarHtml() +

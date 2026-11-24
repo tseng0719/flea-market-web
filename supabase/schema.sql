@@ -29,6 +29,10 @@ create table public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
   email text not null default '',
   display_name text not null check (char_length(btrim(display_name)) between 1 and 40),
+  seller_status text not null default 'none'
+    check (seller_status in ('none', 'pending', 'approved', 'rejected')),
+  seller_reviewed_at timestamptz,
+  seller_reject_reason text not null default '' check (char_length(seller_reject_reason) <= 200),
   created_at timestamptz not null default now()
 );
 
@@ -238,6 +242,7 @@ declare
   signup_kind text := lower(coalesce(new.raw_user_meta_data ->> 'signup_kind', 'buyer'));
   want_buyer boolean := false;
   want_seller boolean := false;
+  seller_status text := 'none';
   admin_email text := 'tsengpinghsuan@gmail.com';
   user_email text := lower(coalesce(new.email, ''));
 begin
@@ -256,21 +261,32 @@ begin
     end if;
     want_buyer := true;
     want_seller := true;
+    seller_status := 'approved';
   elsif signup_kind = 'seller' then
     if user_email = admin_email then
       raise exception '此信箱保留給最高管理員註冊';
     end if;
-    want_seller := true;
+    -- Seller role waits for admin approval.
+    want_seller := false;
+    seller_status := 'pending';
   else
     if user_email = admin_email then
       raise exception '此信箱保留給最高管理員註冊';
     end if;
     want_buyer := true;
     signup_kind := 'buyer';
+    seller_status := 'none';
   end if;
 
-  insert into public.profiles (id, email, display_name)
-  values (new.id, coalesce(new.email, ''), picked_name);
+  insert into public.profiles (id, email, display_name, seller_status, seller_reviewed_at, seller_reject_reason)
+  values (
+    new.id,
+    coalesce(new.email, ''),
+    picked_name,
+    seller_status,
+    case when seller_status = 'approved' then now() else null end,
+    ''
+  );
 
   if want_buyer then
     insert into public.user_roles (user_id, role) values (new.id, 'buyer');

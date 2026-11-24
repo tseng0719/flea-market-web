@@ -1120,6 +1120,23 @@ body[data-page="admin"] #app {
 .badge.role-seller { background: #e7f3ec; color: var(--green); }
 .badge.role-admin { background: #eceaf8; color: #433878; }
 .badge.role-deleted { background: #f3e8e8; color: var(--bad); }
+.badge.role-pending { background: #fff3df; color: #9a6700; }
+.badge.role-rejected { background: #f3e8e8; color: var(--bad); }
+.account-seller-review {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  margin-bottom: 0.2rem;
+}
+.account-seller-review .hint { width: 100%; margin: 0; }
+.seller-pending-banner {
+  margin: 0.85rem auto 0;
+  max-width: var(--shell);
+  border-color: #f0d9a8;
+  background: #fff9ef;
+}
+.seller-pending-banner h2 { margin: 0 0 0.35rem; font-size: 1.15rem; }
 .danger-text { color: var(--bad); }
 .accounts-table tr.is-deleted td { color: var(--muted); }
 .account-deleted-meta .hint { margin: 0.1rem 0 0; }

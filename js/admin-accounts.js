@@ -22,6 +22,7 @@ window.C2CPage = async function () {
     "</select></label>" +
     '<label class="field">' + C2C.esc(t("accountsStatusFilter")) + '<select name="status">' +
     '<option value="active">' + C2C.esc(t("accountsStatusActive")) + "</option>" +
+    '<option value="seller_pending">' + C2C.esc(t("accountsStatusSellerPending")) + "</option>" +
     '<option value="deleted">' + C2C.esc(t("accountsStatusDeleted")) + "</option>" +
     '<option value="all">' + C2C.esc(t("all")) + "</option>" +
     "</select></label>" +
@@ -62,6 +63,13 @@ window.C2CPage = async function () {
     });
   });
   document.getElementById("accounts-body").addEventListener("click", function (event) {
+    var review = event.target.closest("[data-seller-review]");
+    if (review) {
+      reviewSeller(review).catch(function (err) {
+        C2C.flash(C2C.errorText(err), "bad");
+      });
+      return;
+    }
     var btn = event.target.closest("[data-delete-user]");
     if (!btn) return;
     accountsState.deletingId = btn.getAttribute("data-delete-user");
@@ -92,7 +100,7 @@ window.C2CPage = async function () {
 async function reloadAccounts() {
   var profilesRes = await C2C.state.client
     .from("profiles")
-    .select("id, email, display_name, phone, created_at, deleted_at, delete_reason")
+    .select("id, email, display_name, phone, created_at, deleted_at, delete_reason, seller_status, seller_reviewed_at, seller_reject_reason")
     .order("created_at", { ascending: false });
   if (profilesRes.error) throw profilesRes.error;
   var rolesRes = await C2C.state.client.from("user_roles").select("user_id, role");
@@ -119,6 +127,9 @@ async function reloadAccounts() {
       created_at: profile.created_at,
       deleted_at: profile.deleted_at || null,
       delete_reason: profile.delete_reason || "",
+      seller_status: profile.seller_status || "none",
+      seller_reviewed_at: profile.seller_reviewed_at || null,
+      seller_reject_reason: profile.seller_reject_reason || "",
       roles: roles
     };
   });
@@ -132,6 +143,7 @@ function filteredAccounts(data) {
   return accountsState.rows.filter(function (row) {
     if (status === "active" && row.deleted_at) return false;
     if (status === "deleted" && !row.deleted_at) return false;
+    if (status === "seller_pending" && (row.deleted_at || row.seller_status !== "pending")) return false;
     if (role && row.roles.indexOf(role) < 0) return false;
     if (!q) return true;
     var blob = [
@@ -139,6 +151,8 @@ function filteredAccounts(data) {
       row.email,
       row.phone,
       row.delete_reason,
+      row.seller_status,
+      row.seller_reject_reason,
       C2C.shown(row.display_name)
     ].join(" ").toLowerCase();
     return blob.indexOf(q) >= 0;
@@ -150,19 +164,28 @@ function paintStats(rows) {
   var active = rows.filter(function (row) { return !row.deleted_at; });
   var buyers = active.filter(function (row) { return row.roles.indexOf("buyer") >= 0; }).length;
   var sellers = active.filter(function (row) { return row.roles.indexOf("seller") >= 0; }).length;
+  var pending = active.filter(function (row) { return row.seller_status === "pending"; }).length;
   var deleted = rows.filter(function (row) { return !!row.deleted_at; }).length;
   document.getElementById("account-stats").innerHTML =
     '<article class="stat"><span>' + C2C.esc(t("accountsTotal")) + "</span><strong>" + active.length + "</strong></article>" +
     '<article class="stat"><span>' + C2C.esc(t("buyerMode")) + "</span><strong>" + buyers + "</strong></article>" +
     '<article class="stat"><span>' + C2C.esc(t("sellerMode")) + "</span><strong>" + sellers + "</strong></article>" +
+    '<article class="stat"><span>' + C2C.esc(t("accountsPendingSellers")) + "</span><strong>" + pending + "</strong></article>" +
     '<article class="stat"><span>' + C2C.esc(t("accountsDeletedCount")) + "</span><strong>" + deleted + "</strong></article>";
 }
 
-function roleBadges(roles) {
-  if (!roles.length) return '<span class="hint">—</span>';
-  return roles.map(function (role) {
+function roleBadges(row) {
+  var roles = row.roles || [];
+  var badges = roles.map(function (role) {
     return '<span class="badge role-' + C2C.esc(role) + '">' + C2C.esc(C2C.t(role === "seller" ? "sellerMode" : role === "admin" ? "adminMode" : "buyerMode")) + "</span>";
-  }).join(" ");
+  });
+  if (row.seller_status === "pending") {
+    badges.push('<span class="badge role-pending">' + C2C.esc(C2C.t("sellerPendingBadge")) + "</span>");
+  } else if (row.seller_status === "rejected" && roles.indexOf("seller") < 0) {
+    badges.push('<span class="badge role-rejected">' + C2C.esc(C2C.t("sellerRejectedBadge")) + "</span>");
+  }
+  if (!badges.length) return '<span class="hint">—</span>';
+  return badges.join(" ");
 }
 
 function canDelete(row) {
@@ -186,7 +209,20 @@ function roleToggles(row) {
   }
   var isSelf = row.id === C2C.userId();
   var hasAdmin = row.roles.indexOf("admin") >= 0;
+  var review = "";
+  if (row.seller_status === "pending" || row.seller_status === "rejected") {
+    review = '<div class="account-seller-review">' +
+      '<button class="btn" type="button" data-seller-review="approve" data-user="' + C2C.esc(row.id) + '">' + C2C.esc(t("sellerApprove")) + "</button>" +
+      (row.seller_status === "pending"
+        ? '<button class="btn ghost danger-text" type="button" data-seller-review="reject" data-user="' + C2C.esc(row.id) + '">' + C2C.esc(t("sellerReject")) + "</button>"
+        : "") +
+      (row.seller_status === "rejected" && row.seller_reject_reason
+        ? '<p class="hint">' + C2C.esc(t("sellerRejectedReason", { reason: row.seller_reject_reason })) + "</p>"
+        : "") +
+      "</div>";
+  }
   return '<div class="account-role-toggles">' +
+    review +
     '<label class="check"><input type="checkbox" data-role-toggle="buyer" data-user="' + C2C.esc(row.id) + '"' +
       (row.roles.indexOf("buyer") >= 0 ? " checked" : "") + "> " + C2C.esc(t("buyerMode")) + "</label>" +
     '<label class="check"><input type="checkbox" data-role-toggle="seller" data-user="' + C2C.esc(row.id) + '"' +
@@ -217,7 +253,7 @@ function paintAccounts(data) {
     return '<tr class="' + (row.deleted_at ? "is-deleted" : "") + '">' +
       "<td><strong>" + C2C.esc(C2C.shown(row.display_name) || "—") + "</strong></td>" +
       "<td>" + C2C.esc(row.email || "—") + "</td>" +
-      '<td class="col-roles">' + roleBadges(row.roles) + "</td>" +
+      '<td class="col-roles">' + roleBadges(row) + "</td>" +
       "<td>" + C2C.esc(row.phone || "—") + "</td>" +
       "<td>" + C2C.esc(C2C.when(row.created_at) || "—") + "</td>" +
       '<td class="col-actions">' + roleToggles(row) + "</td>" +
@@ -273,6 +309,32 @@ async function submitDelete(data) {
   C2C.flash(t("accountsDeletedFlash"));
 }
 
+async function reviewSeller(button) {
+  var t = C2C.t;
+  var userId = button.getAttribute("data-user");
+  var action = button.getAttribute("data-seller-review");
+  var row = accountsState.rows.find(function (item) { return item.id === userId; });
+  if (!row || row.deleted_at) {
+    C2C.flash(t("accountsDeletedBadge"), "bad");
+    return;
+  }
+  var approve = action === "approve";
+  var reason = "";
+  if (!approve) {
+    reason = window.prompt(t("sellerRejectPrompt"), "") || "";
+    reason = String(reason).trim();
+  }
+  var saved = await C2C.state.client.rpc("admin_review_seller", {
+    target_user: userId,
+    approve: approve,
+    reason: reason
+  });
+  if (saved.error) throw saved.error;
+  await reloadAccounts();
+  paintAccounts(new FormData(document.getElementById("account-filters")));
+  C2C.flash(approve ? t("sellerApprovedFlash") : t("sellerRejectedFlash"));
+}
+
 async function toggleRole(input) {
   var userId = input.getAttribute("data-user");
   var role = input.getAttribute("data-role-toggle");
@@ -289,14 +351,7 @@ async function toggleRole(input) {
     enabled: enabled
   });
   if (saved.error) throw saved.error;
-  if (row) {
-    if (enabled && row.roles.indexOf(role) < 0) row.roles.push(role);
-    if (!enabled) row.roles = row.roles.filter(function (item) { return item !== role; });
-    row.roles.sort(function (a, b) {
-      var rank = { buyer: 0, seller: 1, admin: 2 };
-      return (rank[a] || 9) - (rank[b] || 9);
-    });
-  }
+  await reloadAccounts();
   paintAccounts(new FormData(document.getElementById("account-filters")));
   C2C.flash(C2C.t(enabled ? "accountsRoleOn" : "accountsRoleOff", {
     role: C2C.t(role === "seller" ? "sellerMode" : "buyerMode")

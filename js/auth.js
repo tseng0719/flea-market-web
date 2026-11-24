@@ -122,12 +122,15 @@ function bindRegister(form, kind, t) {
     }
     if (!result.data.session) {
       button.disabled = false;
-      C2C.flash(t("accountCreated"), "ok");
+      C2C.flash(kind === "seller" ? t("sellerPendingCreated") : t("accountCreated"), "ok");
       return;
     }
-    var dest = "index.html";
-    if (kind === "admin") dest = "admin/transactions.html";
-    else if (kind === "seller") dest = "seller/products.html";
+    try { localStorage.removeItem("c2c-mode"); } catch (e) {}
+    if (kind === "seller") {
+      location.href = C2C.path("index.html") + "?seller_pending=1";
+      return;
+    }
+    var dest = kind === "admin" ? "admin/transactions.html" : "index.html";
     location.href = C2C.path(dest);
   });
 }
